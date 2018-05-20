@@ -1,164 +1,210 @@
 const assert = require('assert');
+const path = require('path');
 const { TurnContext, TestAdapter } = require('botbuilder');
 const { createChoicePrompt, ListStyle } = require('../lib');
+const TranscriptUtilities = require('../../botbuilder-core-extensions/tests/transcriptUtilities');
 
-class TestContext extends TurnContext {
-    constructor(request) {
-        super(new TestAdapter(), request);
-        this.sent = undefined;
-        this.onSendActivities((context, activities, next) => {
-            this.sent = activities;
+// Helper for running a TestFlow against a .transcript file
+const getFillTranscriptPath = (file) => path.join('../../transcripts', file);
+function testWithTranscript(transcriptPath, logic) {
+    return TranscriptUtilities.getActivitiesFromTranscript(getFillTranscriptPath(transcriptPath)).then(activities => {
+        return new Promise((resolve, reject) => {
+            var adapter = new TestAdapter(logic);
+            adapter.testActivities(activities)
+                .then(resolve)
+                .catch(reject);
         });
-    }
+    });
 }
 
 const colorChoices = ['red', 'green', 'blue'];
 
-describe('ChoicePrompt', function() {
+describe('ChoicePrompt', function () {
     this.timeout(5000);
 
-    it('should create prompt.', function (done) {
+    it('should create prompt.', function () {
         const prompt = createChoicePrompt();
         assert(prompt, `Prompt not created.`);
         assert(prompt.prompt, `Prompt.prompt() not found.`);
         assert(prompt.recognize, `Prompt.recognize() not found.`);
-        done();
     });
 
-    it('should send prompt().', function (done) {
-        const context = new TestContext({ text: 'test', type: 'message' });
-        const prompt = createChoicePrompt();
-        prompt.prompt(context, colorChoices, `favorite color?`).then(() => {
-            assert(Array.isArray(context.sent) && context.sent.length > 0, `prompt not sent.`);
-            assert(context.sent[0].text.startsWith(`favorite color?`), `invalid prompt sent.`);
-            done();
-        });
+    it('should send prompt().', async function () {
+        await testWithTranscript('ChoicePromptTests/ShouldSendPrompt.transcript',
+            context => {
+                const prompt = createChoicePrompt();
+                prompt.style = ListStyle.none;
+                return prompt.prompt(context, colorChoices, `favorite color?`)
+            });
     });
 
-    it('should send prompt() as an inline list.', function (done) {
-        const context = new TestContext({ text: 'test', type: 'message' });
-        const prompt = createChoicePrompt();
-        prompt.style = ListStyle.inline;
-        prompt.prompt(context, colorChoices, `favorite color?`).then(() => {
-            assert(Array.isArray(context.sent) && context.sent.length > 0, `prompt not sent.`);
-            assert(context.sent[0].text.startsWith(`favorite color?`), `invalid prompt sent.`);
-            done();
-        });
+    it('should send prompt() as an inline list.', async function () {
+        await testWithTranscript('ChoicePromptTests/ShouldSendPromptAsAnInlineList.transcript',
+            context => {
+                const prompt = createChoicePrompt();
+                prompt.style = ListStyle.inline;
+                return prompt.prompt(context, colorChoices, `favorite color?`)
+            });
     });
 
-    it('should send prompt() as a numbered list.', function (done) {
-        const context = new TestContext({ text: 'test', type: 'message' });
-        const prompt = createChoicePrompt();
-        prompt.style = ListStyle.list;
-        prompt.prompt(context, colorChoices, `favorite color?`).then(() => {
-            assert(Array.isArray(context.sent) && context.sent.length > 0, `prompt not sent.`);
-            assert(context.sent[0].text.startsWith(`favorite color?`), `invalid prompt sent.`);
-            done();
-        });
+    it('should send prompt() as a numbered list.', async function () {
+        await testWithTranscript(
+            'ChoicePromptTests/ShouldSendPromptAsANumberedList.transcript',
+            context => {
+                const prompt = createChoicePrompt();
+                prompt.style = ListStyle.list;
+                return prompt.prompt(context, colorChoices, `favorite color?`)
+            });
     });
 
-    it('should send prompt() using suggested actions.', function (done) {
-        const context = new TestContext({ text: 'test', type: 'message' });
-        const prompt = createChoicePrompt();
-        prompt.style = ListStyle.suggestedAction;
-        prompt.prompt(context, colorChoices, `favorite color?`).then(() => {
-            assert(Array.isArray(context.sent) && context.sent.length > 0, `prompt not sent.`);
-            assert(context.sent[0].text.startsWith(`favorite color?`), `invalid prompt sent.`);
-            assert(context.sent[0].suggestedActions, `missing suggested actions.`);
-            done();
-        });
+    it('should send prompt() using suggested actions.', async function () {
+        await testWithTranscript(
+            'ChoicePromptTests/ShouldSendPromptUsingSuggestedActions.transcript',
+            context => {
+                const prompt = createChoicePrompt();
+                prompt.style = ListStyle.suggestedAction;
+                return prompt.prompt(context, colorChoices, `favorite color?`)
+            });
     });
 
-    it('should send prompt() without adding a list.', function (done) {
-        const context = new TestContext({ text: 'test', type: 'message' });
-        const prompt = createChoicePrompt();
-        prompt.style = ListStyle.none;
-        prompt.prompt(context, colorChoices, `favorite color?`).then(() => {
-            assert(Array.isArray(context.sent) && context.sent.length > 0, `prompt not sent.`);
-            assert(context.sent[0].text === `favorite color?`, `invalid prompt sent.`);
-            done();
-        });
+    it('should send prompt() without adding a list.', async function () {
+        await testWithTranscript(
+            'ChoicePromptTests/ShouldSendPromptWithoutAddingAList.transcript',
+            context => {
+                const prompt = createChoicePrompt();
+                prompt.style = ListStyle.none;
+                return prompt.prompt(context, colorChoices, `favorite color?`);
+            });
     });
 
-    it('should send prompt() without adding a list but adding ssml.', function (done) {
-        const context = new TestContext({ text: 'test', type: 'message' });
-        const prompt = createChoicePrompt();
-        prompt.style = ListStyle.none;
-        prompt.prompt(context, colorChoices, `favorite color?`, `spoken prompt`).then(() => {
-            assert(Array.isArray(context.sent) && context.sent.length > 0, `prompt not sent.`);
-            assert(context.sent[0].text === `favorite color?`, `invalid prompt text sent.`);
-            assert(context.sent[0].speak === `spoken prompt`, `invalid prompt speak sent.`);
-            done();
-        });
-    });
-    
-    it('should send activity based prompt().', function (done) {
-        const context = new TestContext({ text: 'test', type: 'message' });
-        const prompt = createChoicePrompt();
-        prompt.prompt(context, colorChoices, { text: 'foo', type: 'message' }).then(() => {
-            assert(Array.isArray(context.sent) && context.sent.length > 0, `prompt not sent.`);
-            assert(context.sent[0].text === 'foo', `invalid prompt text sent.`);
-            done();
-        });
-    });
-    
-    it('should send activity based prompt() with ssml.', function (done) {
-        const context = new TestContext({ text: 'test', type: 'message' });
-        const prompt = createChoicePrompt();
-        prompt.prompt(context, colorChoices, { text: 'foo', type: 'message' }, 'spoken foo').then(() => {
-            assert(Array.isArray(context.sent) && context.sent.length > 0, `prompt not sent.`);
-            assert(context.sent[0].text === 'foo', `invalid prompt text sent.`);
-            assert(context.sent[0].speak === 'spoken foo', `invalid prompt text sent.`);
-            done();
-        });
-    });
-    
-    it('should recognize() a choice.', function (done) {
-        const context = new TestContext({ text: `I'll take red please.`, type: 'message' });
-        const prompt = createChoicePrompt();
-        prompt.recognize(context, colorChoices).then((found) => {
-            assert(typeof found === 'object', `reply not recognized.`);
-            assert(found.value === 'red', `invalid value.`);
-            done();
-        });
+    it('should send prompt() without adding a list but adding ssml.', async function () {
+        await testWithTranscript(
+            'ChoicePromptTests/ShouldSendPromptWithoutAddingAListButAddingSsml.transcript',
+            context => {
+                const prompt = createChoicePrompt();
+                prompt.style = ListStyle.none;
+                prompt.prompt(context, colorChoices, `favorite color?`, `spoken prompt`)
+            }
+        )
     });
 
-    it('should NOT recognize() other text.', function (done) {
-        const context = new TestContext({ text: `what was that?`, type: 'message' });
-        const prompt = createChoicePrompt();
-        prompt.recognize(context, colorChoices).then((found) => {
-            assert(found === undefined, `invalid value.`);
-            done();
-        });
+    it('should send activity based prompt().', async function () {
+        await testWithTranscript(
+            'ChoicePromptTests/ShouldSendActivityBasedPrompt.transcript',
+            context => {
+                const prompt = createChoicePrompt();
+                return prompt.prompt(context, colorChoices, { text: 'test', type: 'message' });
+            });
     });
-    
-    it('should call custom validator.', function (done) {
+
+    it('should send activity based prompt() with ssml.', async function () {
+        await testWithTranscript(
+            'ChoicePromptTests/ShouldSendActivityBasedPromptWithSsml.transcript',
+            context => {
+                const prompt = createChoicePrompt();
+                return prompt.prompt(context, colorChoices, { text: 'test', type: 'message' }, 'spoken test');
+            });
+    });
+
+    it('should recognize() a choice.', async function () {
+        var inPrompt = false;
+        await testWithTranscript(
+            'ChoicePromptTests/ShouldRecognizeAChoice.transcript',
+            context => {
+                const prompt = createChoicePrompt();
+                prompt.style = ListStyle.none;
+                if (!inPrompt) {
+                    inPrompt = true;
+                    return prompt.prompt(context, colorChoices, 'favorite color?');
+                } else {
+                    return prompt.recognize(context, colorChoices)
+                        .then(found => {
+                            if (typeof found === 'object') {
+                                return context.sendActivity(found.value)
+                            } else {
+                                return context.sendActivity("NotRecognized");
+                            }
+                        });
+                }
+            });
+    });
+
+
+    it('should NOT recognize() other text.', async function () {
+        var inPrompt = false;
+        await testWithTranscript(
+            'ChoicePromptTests/ShouldNOTrecognizeOtherText.transcript',
+            context => {
+                const prompt = createChoicePrompt();
+                prompt.style = ListStyle.none;
+                if (!inPrompt) {
+                    inPrompt = true;
+                    return prompt.prompt(context, colorChoices, 'favorite color?');
+                } else {
+                    return prompt.recognize(context, colorChoices)
+                        .then(found => {
+                            if (typeof found === 'object') {
+                                return context.sendActivity(found.value)
+                            } else {
+                                return context.sendActivity("NotRecognized");
+                            }
+                        });
+                }
+            });
+    });
+
+    it('should call custom validator.', async function () {
+        var inPrompt = false;
         let called = false;
-        const context = new TestContext({ text: `I'll take red please.`, type: 'message' });
-        const prompt = createChoicePrompt((context, found) => {
-            assert(typeof found === 'object', `reply not recognized.`);
-            called = true;
-            return undefined;
-        });
-        prompt.recognize(context, colorChoices).then((found) => {
-            assert(called, `custom validator not called.`);
-            assert(found === undefined, `invalid value returned.`);
-            done();
-        });
+        await testWithTranscript(
+            'ChoicePromptTests/ShouldCallCustomValidator.transcript',
+            context => {
+                const prompt = createChoicePrompt((context, found) => {
+                    assert(typeof found === 'object', `reply not recognized.`);
+                    called = true;
+                    return undefined;
+                });
+                prompt.style = ListStyle.none;
+                if (!inPrompt) {
+                    inPrompt = true;
+                    return prompt.prompt(context, colorChoices, 'favorite color?');
+                } else {
+                    return prompt.recognize(context, colorChoices)
+                        .then(found => {
+                            if (typeof found === 'object') {
+                                return context.sendActivity(found.value)
+                            } else {
+                                return context.sendActivity("validation failed");
+                            }
+                        });
+                }
+            });
+
+        assert(called, `custom validator not called.`);
     });
 
-    it('should handle an undefined request.', function (done) {
-        let called = false;
-        const context = new TestContext(undefined);
-        const prompt = createChoicePrompt((context, found) => {
-            assert(found === undefined, `value shouldn't have been recognized.`);
-            called = true;
-            return undefined;
-        });
-        prompt.recognize(context).then((found) => {
-            assert(called, `custom validator not called.`);
-            assert(found === undefined, `invalid value returned.`);
-            done();
-        });
+    it('should handle an undefined request.', async function () {
+        var inPrompt = false;
+        await testWithTranscript(
+            'ChoicePromptTests/ShouldHandleAnUndefinedRequest.transcript',
+            context => {
+                const prompt = createChoicePrompt((context, found) => {
+                    return;
+                });
+                prompt.style = ListStyle.none;
+                if (!inPrompt) {
+                    inPrompt = true;
+                    return prompt.prompt(context, colorChoices, 'favorite color?');
+                } else {
+                    return prompt.recognize(context, colorChoices)
+                        .then(found => {
+                            if (typeof found === 'object') {
+                                return context.sendActivity(found.value)
+                            } else {
+                                return context.sendActivity("NotRecognized");
+                            }
+                        });
+                }
+            });
     });
 });
