@@ -1,6 +1,21 @@
 const assert = require('assert');
+const path = require('path');
 const { TurnContext, TestAdapter } = require('botbuilder');
 const { createAttachmentPrompt } = require('../lib');
+const TranscriptUtilities = require('../../botbuilder-core-extensions/tests/transcriptUtilities');
+
+// Helper for running a TestFlow against a .transcript file
+const getFillTranscriptPath = (file) => path.join('../../transcripts', file);
+function testWithTranscript(transcriptPath, logic) {
+    return TranscriptUtilities.getActivitiesFromTranscript(getFillTranscriptPath(transcriptPath)).then(activities => {
+        return new Promise((resolve, reject) => {
+            var adapter = new TestAdapter(logic);
+            adapter.testActivities(activities)
+                .then(resolve)
+                .catch(reject);
+        });
+    });
+}
 
 class TestContext extends TurnContext {
     constructor(request) {
@@ -12,35 +27,43 @@ class TestContext extends TurnContext {
     }
 }
 
-describe('AttachmentPrompt', function() {
+describe('AttachmentPrompt', function () {
     this.timeout(5000);
 
-    it('should create prompt.', function (done) {
+    it('should create prompt.', function () {
         const prompt = createAttachmentPrompt();
         assert(prompt, `Prompt not created.`);
         assert(prompt.prompt, `Prompt.prompt() not found.`);
         assert(prompt.recognize, `Prompt.recognize() not found.`);
-        done();
     });
 
-    it('should send prompt().', function (done) {
-        const context = new TestContext({ text: 'test', type: 'message' });
-        const prompt = createAttachmentPrompt();
-        prompt.prompt(context, `test prompt`).then(() => {
-            assert(Array.isArray(context.sent) && context.sent.length > 0, `prompt not sent.`);
-            assert(context.sent[0].text === 'test prompt', `invalid prompt sent.`);
-            done();
-        });
+    it('should send prompt().', async function () {
+        await testWithTranscript('AttachmentPromptTests/AttachmentPrompt_ShouldSendPrompt.transcript',
+            context => {
+                const prompt = createAttachmentPrompt();
+                return prompt.prompt(context, `please add an attachment.`)
+            });
     });
 
-    it('should recognize() a attachment.', function (done) {
-        const context = new TestContext({ attachments: [{ contentType: 'foo' }], type: 'message' });
-        const prompt = createAttachmentPrompt();
-        prompt.recognize(context).then((values) => {
-            assert(Array.isArray(values), `values not an array.`);
-            assert(values.length === 1, `reply not recognized.`);
-            done();
-        });
+    it('should recognize() a attachment.', async function () {
+        var inPrompt = false;
+        await testWithTranscript('AttachmentPromptTests/AttachmentPrompt_ShouldRecognizeAttachment.transcript',
+            context => {
+                const prompt = createAttachmentPrompt();
+                if (!inPrompt) {
+                    inPrompt = true;
+                    return prompt.prompt(context, `please add an attachment.`)
+                } else {
+                    return prompt.recognize(context).then(result => {
+                        if (result.length === 1) {
+                            var reply = result[0].content;
+                            return context.sendActivity(reply);
+                        } else {
+                            return context.sendActivity("invalid");
+                        }
+                    });
+                }
+            });
     });
 
     it('should NOT recognize() other text.', function (done) {
@@ -51,7 +74,7 @@ describe('AttachmentPrompt', function() {
             done();
         });
     });
-    
+
     it('should call custom validator.', function (done) {
         let called = false;
         const context = new TestContext({ attachments: [{ contentType: 'foo' }], type: 'message' });
